@@ -20,7 +20,13 @@ A safety-first Linux server hardening dashboard and CLI for small VPSs and dedic
 - Authentication required for dashboard/API.
 - Bind to localhost behind a TLS reverse proxy.
 
-## Audit coverage and limits\n\nThe CLI accepts an optional scope, for example `bash linux-lockdown-audit.sh ssh` or `bash linux-lockdown-audit.sh firewall`. The default is `all`. Supported scopes are `all`, `ssh`, `firewall`, `web`, and `system`. The dashboard passes the selected scope to the audit script.\n\nThe audit only reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSHGuard, SSH, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.\n\n## Requirements
+## Audit coverage and limits
+
+The CLI accepts an optional scope, for example `bash linux-lockdown-audit.sh ssh` or `bash linux-lockdown-audit.sh firewall`. The default is `all`. Supported scopes are `all`, `ssh`, `firewall`, `web`, and `system`. The dashboard passes the selected scope to the audit script.
+
+The audit only reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSHGuard, SSH, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.
+
+## Requirements
 
 - Python 3.11+
 - Linux

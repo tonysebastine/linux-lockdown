@@ -1,0 +1,28 @@
+[Unit]
+Description=Linux Lockdown security audit dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=linux-lockdown
+Group=linux-lockdown
+WorkingDirectory=/opt/linux-lockdown
+EnvironmentFile=/etc/linux-lockdown.env
+ExecStart=/opt/linux-lockdown/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8088 --workers 1
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/linux-lockdown /var/log/linux-lockdown
+
+[Install]
+WantedBy=multi-user.target

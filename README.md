@@ -34,10 +34,12 @@ The audit only reports whether brute-force protection is detected and, where pos
 
 ## Local setup
 
+The CLI audit does not need the Python dashboard dependencies. To install the dashboard dependencies safely into an isolated `.venv` without `sudo` or system-wide package changes, run as an unprivileged user:
+
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
+bash scripts/install-deps.sh
+source .venv/bin/activate
+
 export LOCKDOWN_USERNAME=admin
 export LOCKDOWN_PASSWORD='use-a-long-unique-password'
 export LOCKDOWN_BIND=127.0.0.1

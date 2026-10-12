@@ -8,15 +8,19 @@ A safety-first Linux server hardening dashboard and CLI for small VPSs and dedic
 - **Dry run**: emits a proposed plan only; makes no system changes.
 - **Execute**: reserved for a future reviewed remediation engine. The web UI deliberately blocks execution until change-specific allowlists, backup/rollback tests, SSH recovery checks, and post-change verification are implemented. Do not treat the button as permission to run arbitrary shell commands.
 
-## Current MVP
+## Current MVP (v0.2.0)
 
 - Responsive dashboard with mode and scope selection.
-- Read-only host audit endpoint.
+- Scoped read-only host audit endpoint (`all`, `ssh`, `firewall`, `web`, `system`).
+- SSH syntax/effective-setting checks, including SSH drop-in files and `Match`/`Include` markers.
+- Best-effort detection of Fail2ban, CrowdSec, and SSHGuard; Fail2ban jail status when its CLI is available.
+- Read-only UFW/firewalld/nftables/iptables inspection and a bounded recent SSH authentication-failure count.
+- Best-effort hosting-panel marker and running web/application service detection.
 - No arbitrary command execution, no package installation, no firewall/SSH edits, no service restarts.
 - Authentication required for dashboard/API.
 - Bind to localhost behind a TLS reverse proxy.
 
-## Requirements
+## Audit coverage and limits\n\nThe CLI accepts an optional scope, for example `bash linux-lockdown-audit.sh ssh` or `bash linux-lockdown-audit.sh firewall`. The default is `all`. Supported scopes are `all`, `ssh`, `firewall`, `web`, and `system`. The dashboard passes the selected scope to the audit script.\n\nThe audit only reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSHGuard, SSH, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.\n\n## Requirements
 
 - Python 3.11+
 - Linux

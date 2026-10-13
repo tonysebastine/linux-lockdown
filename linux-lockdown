@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
-# Linux Lockdown unified CLI. Audit and planning only; remediation is intentionally disabled.
+# Linux Lockdown standalone CLI: read-only audit, plan, dry-run, and verification.
+# Apply is intentionally disabled until reviewed remediations have tested rollback.
 set -Eeuo pipefail
 umask 077
 
-VERSION="0.3.0"
-ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-AUDIT_ENGINE="$ROOT_DIR/linux-lockdown-audit.sh"
+VERSION="0.3.1"
+COMMAND="${1:-audit}"
+if [[ $# -gt 0 ]]; then shift; fi
+SCOPE="${1:-all}"
+if [[ $# -gt 1 ]]; then printf 'ERROR: too many arguments. Run: bash linux-lockdown help\n' >&2; exit 2; fi
 
 usage() {
   cat <<'USAGE'
-Linux Lockdown — one entry point for safe server checks
+Linux Lockdown — standalone smart Linux server audit
 
-Usage:
-  bash linux-lockdown [command] [scope]
+Usage: bash linux-lockdown [command] [scope]
 
 Commands:
-  audit [scope]    Run the read-only audit (default command).
-  plan [scope]     Show a cautious review plan, then the audit report.
-  dry-run [scope]  Alias for plan; performs no system changes.
-  verify           Check local script syntax, then run the full audit.
-  apply            Refuse execution (remediation engine is not implemented).
+  audit [scope]    Run read-only checks (default).
+  plan [scope]     Print a cautious review plan and run the audit.
+  dry-run [scope]  Alias for plan; no changes are made.
+  verify           Validate this script's syntax, then run the full audit.
+  apply            Refuse execution; remediation is not implemented.
   help             Show this help.
 
 Scopes: all, ssh, firewall, web, system
-
 Examples:
   bash linux-lockdown
   bash linux-lockdown audit ssh
@@ -31,76 +32,139 @@ Examples:
   bash linux-lockdown dry-run firewall
   bash linux-lockdown verify
 
-Safety:
-  - audit/plan/dry-run/verify do not intentionally change system configuration.
-  - No packages are installed and no services are restarted.
-  - apply is disabled; this tool does not yet perform hardening changes.
-  - Keep an active SSH session and out-of-band recovery available before future
-    remediation features are considered.
+This file is standalone and has no project-file dependencies. It does not
+install packages, edit configuration, change firewall rules, or restart services.
 USAGE
 }
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 2; }
 have() { command -v "$1" >/dev/null 2>&1; }
-
-COMMAND="${1:-audit}"
-if [[ $# -gt 0 ]]; then shift; fi
-SCOPE="${1:-all}"
-if [[ $# -gt 1 ]]; then die "Too many arguments. Run: bash linux-lockdown help"; fi
+section() { printf '\n===== %s =====\n' "$1"; }
+run_readonly() { "$@" 2>&1 || true; }
 
 case "$COMMAND" in
-  help|-h|--help)
-    usage
-    exit 0
-    ;;
+  help|-h|--help) usage; exit 0 ;;
   apply)
     printf 'Linux Lockdown v%s: APPLY IS DISABLED.\n' "$VERSION" >&2
-    printf 'No configuration was changed. The reviewed remediation engine, per-change backups, rollback, and post-change verification are not implemented yet.\n' >&2
+    printf 'No changes made. Automated remediation, per-change backups, rollback, and post-change verification are not implemented.\n' >&2
     exit 3
     ;;
   audit|plan|dry-run)
     case "$SCOPE" in all|ssh|firewall|web|system) ;; *) die "Invalid scope '$SCOPE'. Valid scopes: all, ssh, firewall, web, system";; esac
-    [[ -f "$AUDIT_ENGINE" ]] || die "Missing audit engine: $AUDIT_ENGINE"
     ;;
   verify)
     [[ $# -eq 0 ]] || die "verify takes no scope argument"
+    SCOPE=all
     ;;
-  *)
-    die "Unknown command '$COMMAND'. Run: bash linux-lockdown help"
-    ;;
+  *) die "Unknown command '$COMMAND'. Run: bash linux-lockdown help" ;;
 esac
 
-printf 'Linux Lockdown v%s\nCommand: %s\n' "$VERSION" "$COMMAND"
-printf 'Timestamp UTC: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf unknown)"
-
+printf 'Linux Lockdown v%s\nCommand: %s\nScope: %s\nTimestamp UTC: %s\n' "$VERSION" "$COMMAND" "$SCOPE" "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf unknown)"
 if [[ "$COMMAND" == verify ]]; then
-  printf '\n===== Local script syntax =====\n'
-  bash -n "$ROOT_DIR/linux-lockdown" || die "Unified CLI syntax check failed"
-  bash -n "$AUDIT_ENGINE" || die "Audit engine syntax check failed"
-  printf ' - Unified CLI syntax: PASS\n - Audit engine syntax: PASS\n'
-  SCOPE="all"
+  section "Script validation"
+  bash -n "$0" || die "Shell syntax validation failed"
+  printf ' - Shell syntax validation: PASS\n'
 fi
 
 if [[ "$COMMAND" == plan || "$COMMAND" == dry-run ]]; then
-  cat <<'PLAN'
-
-===== Proposed safe review plan (NO CHANGES) =====
-1. Review effective SSH settings and confirm an alternate working login before considering SSH changes.
-2. Review firewall policy against required SSH, web, panel, VPN, and application ports before considering rule changes.
-3. Identify the hosting panel and application stack before changing web-server, runtime, or file permissions.
-4. Check brute-force protection, update policy, backups, disk space, and service recovery procedures.
-5. Approve each future remediation individually; never apply a blanket profile to an unknown stack.
-6. Require a timestamped backup, syntax/config validation, post-change check, and documented rollback for each supported change.
-PLAN
+  section "Proposed review plan (NO CHANGES)"
+  printf '%s\n' \
+    '1. Confirm a working alternate SSH session before considering SSH changes.' \
+    '2. Map required SSH, web, panel, VPN, and application ports before changing firewall policy.' \
+    '3. Identify the control panel and application stack before changing web-server/runtime settings.' \
+    '4. Review updates, brute-force protection, backups, disk space, and recovery access.' \
+    '5. Approve each future remediation individually; never apply a blanket profile to an unknown stack.' \
+    '6. Require timestamped backups, config validation, post-change checks, and tested rollback for each supported change.'
 fi
 
 printf '\n===== Read-only host audit =====\n'
-case "$COMMAND" in
-  audit|plan|dry-run|verify)
-    bash "$AUDIT_ENGINE" "$SCOPE"
-    ;;
-esac
+if [[ -r /etc/os-release ]]; then
+  . /etc/os-release
+  printf 'OS: %s (%s %s)\n' "${PRETTY_NAME:-unknown}" "${ID:-unknown}" "${VERSION_ID:-unknown}"
+else
+  printf 'OS: unknown (/etc/os-release unavailable)\n'
+fi
+printf 'Kernel: %s\nArchitecture: %s\nUID: %s\n' "$(uname -r 2>/dev/null || printf unknown)" "$(uname -m 2>/dev/null || printf unknown)" "$(id -u 2>/dev/null || printf unknown)"
 
+if [[ "$SCOPE" == all || "$SCOPE" == system || "$SCOPE" == web ]]; then
+  section "Detected commands"
+  found=0
+  for c in sshd ss nginx apache2 httpd caddy lsws php python3 node npm java docker podman ufw firewall-cmd nft iptables fail2ban-client cscli sshguard; do
+    if have "$c"; then printf ' - %s: present\n' "$c"; found=1; fi
+  done
+  [[ "$found" -eq 1 ]] || printf ' - No allowlisted component commands detected\n'
+
+  section "Hosting panel markers (best-effort)"
+  panel_found=0
+  for marker in /usr/local/cpanel /usr/local/psa /usr/local/CyberCP /usr/local/ispconfig /usr/local/directadmin /usr/local/1panel /opt/1panel; do
+    if [[ -e "$marker" ]]; then printf ' - marker present: %s\n' "$marker"; panel_found=1; fi
+  done
+  [[ "$panel_found" -eq 1 ]] || printf ' - No known panel marker paths detected (not proof no panel exists)\n'
+
+  section "Running web/application services (best-effort)"
+  if have systemctl; then
+    units="$(systemctl --no-pager --type=service --state=running list-units 2>/dev/null | grep -Ei 'nginx|apache|httpd|caddy|litespeed|lsws|php.*fpm|docker|podman|tomcat|gunicorn|uvicorn|fail2ban|crowdsec|sshguard' || true)"
+    [[ -n "$units" ]] && printf '%s\n' "$units" || printf ' - No matching running service names detected\n'
+  else
+    printf ' - systemctl unavailable; service inspection skipped\n'
+  fi
+fi
+
+if [[ "$SCOPE" == all || "$SCOPE" == ssh ]]; then
+  section "SSH configuration"
+  if have sshd; then
+    if sshd -t >/dev/null 2>&1; then printf ' - sshd syntax validation: PASS\n'; else printf ' - sshd syntax validation: FAIL or config unreadable\n'; fi
+    printf ' - Effective settings from sshd -T (read-only):\n'
+    sshd -T 2>/dev/null | awk '$1 ~ /^(port|listenaddress|permitrootlogin|passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication|authenticationmethods|maxauthtries|logingracetime|allowusers|allowgroups)$/ {print "   " $0}' || printf '   unavailable\n'
+  else
+    printf ' - sshd command not found; effective settings unavailable\n'
+  fi
+  printf ' - Main config directives and include/match markers:\n'
+  if [[ -r /etc/ssh/sshd_config ]]; then
+    awk 'tolower($1)=="include" || tolower($1)=="match" || tolower($1)=="port" || tolower($1)=="permitrootlogin" || tolower($1)=="passwordauthentication" || tolower($1)=="pubkeyauthentication" || tolower($1)=="kbdinteractiveauthentication" || tolower($1)=="authenticationmethods" || tolower($1)=="allowusers" || tolower($1)=="allowgroups" {print "   " $0}' /etc/ssh/sshd_config
+  else
+    printf '   Main SSH config not readable by this user\n'
+  fi
+  if [[ -d /etc/ssh/sshd_config.d ]]; then
+    printf ' - SSH drop-in files:\n'
+    find /etc/ssh/sshd_config.d -maxdepth 1 -type f -name '*.conf' -printf '   %f\n' 2>/dev/null | sort
+  fi
+  printf ' - Listening socket count: '
+  if have ss; then ss -H -lntu 2>/dev/null | wc -l | tr -d ' '; else printf unavailable; fi
+  printf '\n'
+
+  section "Brute-force protection"
+  protection_found=0
+  if have fail2ban-client; then
+    protection_found=1; printf ' - Fail2ban client present\n'
+    run_readonly fail2ban-client status
+    run_readonly fail2ban-client status sshd
+  else printf ' - Fail2ban client not found\n'; fi
+  if have cscli; then protection_found=1; printf ' - CrowdSec CLI present\n'; run_readonly cscli metrics; else printf ' - CrowdSec CLI not found\n'; fi
+  if have sshguard; then protection_found=1; printf ' - SSHGuard command present\n'; else printf ' - SSHGuard command not found\n'; fi
+  [[ "$protection_found" -eq 1 ]] || printf ' - No recognized brute-force protection CLI found; service/package checks may still be needed\n'
+  if have journalctl; then
+    failures="$(journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -o cat 2>/dev/null | grep -Eic 'Failed password|authentication failure|Invalid user' || true)"
+    printf ' - Matching SSH failure/invalid-user log lines in last 24h: %s (best-effort count)\n' "${failures:-0}"
+  else printf ' - journalctl unavailable; recent SSH failure count skipped\n'; fi
+fi
+
+if [[ "$SCOPE" == all || "$SCOPE" == firewall ]]; then
+  section "Firewall status"
+  if have ufw; then printf ' - UFW status (read-only):\n'; run_readonly ufw status verbose; else printf ' - UFW not found\n'; fi
+  if have firewall-cmd; then printf ' - firewalld state (read-only):\n'; run_readonly firewall-cmd --state; run_readonly firewall-cmd --get-active-zones; else printf ' - firewall-cmd not found\n'; fi
+  if have nft; then printf ' - nftables ruleset (first 80 lines, read-only):\n'; run_readonly nft list ruleset | head -80; else printf ' - nft not found\n'; fi
+  if have iptables; then printf ' - iptables IPv4 filter rules (first 60 lines, read-only):\n'; run_readonly iptables -S | head -60; else printf ' - iptables not found\n'; fi
+  printf ' - Tool presence alone does not prove that a firewall policy is active or correct.\n'
+fi
+
+section "Safety and limitations"
+printf '%s\n' \
+  ' - No packages installed, files changed, firewall rules changed, or services restarted.' \
+  ' - Best-effort checks; some commands may be unavailable or require elevated privileges.' \
+  ' - SSH effective settings can vary by connection context and Match rules.' \
+  ' - Hosting-panel detection uses a small set of marker paths and can miss custom installations.' \
+  ' - Audit output can disclose host configuration; store and share it carefully.'
 if [[ "$COMMAND" == plan || "$COMMAND" == dry-run ]]; then
-  printf '\nPlan complete: no changes were made. The items above are review steps, not proof that each issue exists.\n'
+  printf '\nPlan complete: no changes were made. The checklist is not proof that each issue exists.\n'
 fi

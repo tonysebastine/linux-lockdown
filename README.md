@@ -2,14 +2,45 @@
 
 A safety-first Linux server hardening dashboard and CLI for small VPSs and dedicated servers.
 
-## Modes
+## One entry point
+
+Use `linux-lockdown` as the single CLI entry point. It calls the audit engine, keeping the implementation modular while giving you one consistent command.
+
+```bash
+# Full read-only audit
+bash linux-lockdown
+
+# Scope-specific audit
+bash linux-lockdown audit ssh
+bash linux-lockdown audit firewall
+bash linux-lockdown audit web
+bash linux-lockdown audit system
+
+# Print a cautious review plan and run the audit (no changes)
+bash linux-lockdown plan all
+bash linux-lockdown dry-run firewall
+
+# Check shell syntax and run the full audit
+bash linux-lockdown verify
+
+# Intentionally refuses to run
+bash linux-lockdown apply
+```
+
+The default command is `audit`; supported scopes are `all`, `ssh`, `firewall`, `web`, and `system`. You can also run `bash linux-lockdown help`.
+
+## Modes and safety
 
 - **Audit**: read-only checks; default.
-- **Dry run**: emits a proposed plan only; makes no system changes.
-- **Execute**: reserved for a future reviewed remediation engine. The web UI deliberately blocks execution until change-specific allowlists, backup/rollback tests, SSH recovery checks, and post-change verification are implemented. Do not treat the button as permission to run arbitrary shell commands.
+- **Plan / dry-run**: prints a cautious review checklist and the audit report; makes no system changes.
+- **Verify**: checks local shell syntax, then runs the full read-only audit.
+- **Apply**: deliberately exits without making changes. A reviewed remediation engine is not implemented yet.
 
-## Current MVP (v0.2.0)
+No CLI mode installs packages, edits SSH or firewall configuration, or restarts services. The unified entry point is not yet a one-file standalone bundle: it requires `linux-lockdown-audit.sh` beside it. This separation makes the audit engine independently testable.
 
+## Current MVP (v0.3.0)
+
+- Unified CLI entry point for audit, plan, dry-run, verify, and a guarded apply refusal.
 - Responsive dashboard with mode and scope selection.
 - Scoped read-only host audit endpoint (`all`, `ssh`, `firewall`, `web`, `system`).
 - SSH syntax/effective-setting checks, including SSH drop-in files and `Match`/`Include` markers.
@@ -22,19 +53,18 @@ A safety-first Linux server hardening dashboard and CLI for small VPSs and dedic
 
 ## Audit coverage and limits
 
-The CLI accepts an optional scope, for example `bash linux-lockdown-audit.sh ssh` or `bash linux-lockdown-audit.sh firewall`. The default is `all`. Supported scopes are `all`, `ssh`, `firewall`, `web`, and `system`. The dashboard passes the selected scope to the audit script.
+The audit reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSH, SSHGuard, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.
 
-The audit only reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSHGuard, SSH, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.
+Detection is best-effort: unknown panels, custom paths, containers, and application stacks may be missed. Plan output is a generic review checklist, not a claim that each listed issue exists. Do not blindly apply recommendations to a production host.
 
 ## Requirements
 
-- Python 3.11+
-- Linux
-- `bash`, `uname`, `id`, `awk`, `ss` (some checks optional)
+- CLI: Linux and Bash; optional checks use common system utilities.
+- Dashboard: Python 3.11+.
 
 ## Local setup
 
-The CLI audit does not need the Python dashboard dependencies. To install the dashboard dependencies safely into an isolated `.venv` without `sudo` or system-wide package changes, run as an unprivileged user:
+The CLI does not need Python dashboard dependencies. To install dashboard dependencies safely into an isolated `.venv` without `sudo` or system-wide package changes, run as an unprivileged user:
 
 ```bash
 bash scripts/install-deps.sh
@@ -59,20 +89,20 @@ See `deploy/linux-lockdown.service.example`. Adjust the service user and paths t
 
 ## Security notes
 
-- Use a unique strong password and protect `.env`/service environment files.
+- Use a unique strong password and protect service environment files.
 - Add network-level access restrictions or an identity-aware proxy if available.
-- Do not run this service as root.
+- Do not run the dashboard as root.
 - Never execute shell commands assembled from HTTP input.
 - Keep audit reports private; they can disclose host details.
-- `execute` mode is intentionally disabled until a reviewed, per-control remediation engine exists.
+- Execute/apply mode remains disabled until a reviewed, per-control remediation engine exists.
 
 ## Deployment outline
 
-1. Clone this repository to `/opt/linux-lockdown`.
-2. Create a dedicated unprivileged service account and Python virtual environment.
-3. Install dependencies and set credentials via a root-readable environment file.
+1. Clone this repository to a working directory such as `/opt/linux-lockdown`.
+2. Use `bash linux-lockdown` for the CLI audit, or create a dedicated unprivileged account for the dashboard.
+3. For the dashboard, create a Python virtual environment and install dependencies.
 4. Run Uvicorn bound to `127.0.0.1:8088` using systemd.
 5. Configure Nginx or an existing reverse proxy for `lockdown.thbtz.in` with HTTPS.
 6. Verify DNS, TLS, authentication, logs and the audit endpoint before use.
 
-This MVP has not been deployed to your server and does not verify that the domain points to it.
+The dashboard has not been deployed to your server and this repository does not verify that the domain points to it.

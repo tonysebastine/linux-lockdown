@@ -72,3 +72,55 @@ def test_audit_script_firewall_scope_is_read_only():
     assert "Scope: firewall" in report
     assert "Firewall status" in report
     assert "no packages installed" in report.lower()
+
+
+
+def test_unified_cli_help():
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "linux-lockdown"
+    result = subprocess.run(
+        ["bash", str(script), "help"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "audit [scope]" in result.stdout
+    assert "apply" in result.stdout
+
+
+def test_unified_cli_plan_is_non_mutating():
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "linux-lockdown"
+    result = subprocess.run(
+        ["bash", str(script), "plan", "firewall"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "NO CHANGES" in result.stdout
+    assert "Scope: firewall" in result.stdout
+    assert "no changes were made" in result.stdout.lower()
+
+
+def test_unified_cli_apply_is_disabled():
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "linux-lockdown"
+    result = subprocess.run(
+        ["bash", str(script), "apply"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 3
+    assert "APPLY IS DISABLED" in result.stderr

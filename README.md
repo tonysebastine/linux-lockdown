@@ -1,13 +1,13 @@
 # Linux Lockdown
 
-A safety-first Linux server hardening dashboard and CLI for small VPSs and dedicated servers.
+A safety-first Linux server hardening CLI and optional dashboard for small VPSs and dedicated servers.
 
-## One entry point
+## One standalone script
 
-Use `linux-lockdown` as the single CLI entry point. It calls the audit engine, keeping the implementation modular while giving you one consistent command.
+The `linux-lockdown` file is a self-contained CLI entry point; it does not need the other project files to run its host audit. The dashboard continues to use `linux-lockdown-audit.sh` as its scoped audit engine.
 
 ```bash
-# Full read-only audit
+# Full read-only audit (default)
 bash linux-lockdown
 
 # Scope-specific audit
@@ -16,44 +16,42 @@ bash linux-lockdown audit firewall
 bash linux-lockdown audit web
 bash linux-lockdown audit system
 
-# Print a cautious review plan and run the audit (no changes)
+# Review checklist + audit, with no changes
 bash linux-lockdown plan all
 bash linux-lockdown dry-run firewall
 
-# Check shell syntax and run the full audit
+# Syntax check + full audit
 bash linux-lockdown verify
 
-# Intentionally refuses to run
+# Intentionally refuses to execute changes
 bash linux-lockdown apply
 ```
 
-The default command is `audit`; supported scopes are `all`, `ssh`, `firewall`, `web`, and `system`. You can also run `bash linux-lockdown help`.
+Supported scopes: `all`, `ssh`, `firewall`, `web`, and `system`. Run `bash linux-lockdown help` for usage.
 
 ## Modes and safety
 
 - **Audit**: read-only checks; default.
 - **Plan / dry-run**: prints a cautious review checklist and the audit report; makes no system changes.
-- **Verify**: checks local shell syntax, then runs the full read-only audit.
+- **Verify**: checks the standalone script's shell syntax, then runs the full read-only audit.
 - **Apply**: deliberately exits without making changes. A reviewed remediation engine is not implemented yet.
 
-No CLI mode installs packages, edits SSH or firewall configuration, or restarts services. The unified entry point is not yet a one-file standalone bundle: it requires `linux-lockdown-audit.sh` beside it. This separation makes the audit engine independently testable.
+No CLI mode installs packages, edits SSH or firewall configuration, or restarts services. The script is self-contained, but the dashboard's audit endpoint uses the separate audit engine.
 
-## Current MVP (v0.3.0)
+## Current MVP (v0.3.1)
 
-- Unified CLI entry point for audit, plan, dry-run, verify, and a guarded apply refusal.
-- Responsive dashboard with mode and scope selection.
-- Scoped read-only host audit endpoint (`all`, `ssh`, `firewall`, `web`, `system`).
+- Standalone CLI for audit, plan, dry-run, verify, and a guarded apply refusal.
+- Scoped read-only audit endpoint in the optional dashboard (`all`, `ssh`, `firewall`, `web`, `system`).
 - SSH syntax/effective-setting checks, including SSH drop-in files and `Match`/`Include` markers.
 - Best-effort detection of Fail2ban, CrowdSec, and SSHGuard; Fail2ban jail status when its CLI is available.
 - Read-only UFW/firewalld/nftables/iptables inspection and a bounded recent SSH authentication-failure count.
 - Best-effort hosting-panel marker and running web/application service detection.
 - No arbitrary command execution, no package installation, no firewall/SSH edits, no service restarts.
-- Authentication required for dashboard/API.
-- Bind to localhost behind a TLS reverse proxy.
+- Dashboard authentication required; bind to localhost behind a TLS reverse proxy.
 
 ## Audit coverage and limits
 
-The audit reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSH, SSHGuard, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.
+The audit reports whether brute-force protection is detected and, where possible, reads its current status. It does **not** install, configure, enable, disable, or restart Fail2ban, CrowdSec, SSHGuard, SSH, or firewall services. A missing CLI does not prove a package/service is absent. SSH authentication counts are best-effort log-line counts, not a compromise verdict. Firewall ruleset output is bounded to avoid excessive reports.
 
 Detection is best-effort: unknown panels, custom paths, containers, and application stacks may be missed. Plan output is a generic review checklist, not a claim that each listed issue exists. Do not blindly apply recommendations to a production host.
 
@@ -62,7 +60,7 @@ Detection is best-effort: unknown panels, custom paths, containers, and applicat
 - CLI: Linux and Bash; optional checks use common system utilities.
 - Dashboard: Python 3.11+.
 
-## Local setup
+## Optional dashboard setup
 
 The CLI does not need Python dashboard dependencies. To install dashboard dependencies safely into an isolated `.venv` without `sudo` or system-wide package changes, run as an unprivileged user:
 
